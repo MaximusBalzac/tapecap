@@ -1,0 +1,18 @@
+[Unit]
+Description=TapeCap – automatic VHS/camcorder tape capture
+After=network-online.target local-fs.target sound.target mnt-usb.mount
+Wants=network-online.target mnt-usb.mount
+
+[Service]
+User=admin
+SupplementaryGroups=video audio render
+WorkingDirectory=/home/admin/tapecap
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/admin/tapecap/venv/bin/python -m tapecap
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

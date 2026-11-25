@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TapeCap</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#1d2330;--mute:#6b7280;--line:#e3e6eb;--acc:#2563eb;--rec:#dc2626;--ok:#16a34a;--warn:#d97706}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#1b1f26;--ink:#e7e9ee;--mute:#9aa3b2;--line:#2b313b;--acc:#60a5fa}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{font-size:18px;margin:0}header nav{display:flex;gap:4px;margin-left:auto}
+nav button{border:0;background:none;color:var(--mute);padding:8px 14px;border-radius:8px;font:inherit;cursor:pointer}
+nav button.on{background:var(--bg);color:var(--ink);font-weight:600}
+main{max-width:1100px;margin:0 auto;padding:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 12px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}@media(max-width:780px){.grid{grid-template-columns:1fr}}
+.state{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:650}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--mute);flex:none}
+.recording .dot{background:var(--rec);animation:p 1.2s infinite}.idle .dot{background:var(--ok)}.saving .dot{background:var(--warn)}
+@keyframes p{50%{opacity:.3}}
+.mute{color:var(--mute)}.small{font-size:13px}
+#preview{width:100%;aspect-ratio:4/3;background:#000;border-radius:8px;object-fit:contain;display:block}
+button.b{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:8px;font:inherit;cursor:pointer}
+button.b:hover{border-color:var(--acc)}button.p{background:var(--acc);border-color:var(--acc);color:#fff}button.r{background:var(--rec);border-color:var(--rec);color:#fff}
+.bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--acc)}
+table{width:100%;border-collapse:collapse}td{padding:4px 0;vertical-align:top}td:first-child{color:var(--mute);width:38%}
+.ev{font-size:13px;max-height:260px;overflow:auto}.ev div{padding:3px 0;border-bottom:1px solid var(--line)}
+.tapes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.tape img{width:100%;border-radius:8px;display:block;background:#000;aspect-ratio:4/3;object-fit:cover;cursor:pointer}
+.tape h3{font-size:15px;margin:10px 0 4px}.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;background:var(--bg);color:var(--mute)}
+.tag.failed{background:#fee2e2;color:#991b1b}.tag.processing{background:#dbeafe;color:#1e40af}.tag.queued{background:#fef3c7;color:#92400e}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.acts a,.acts button{font-size:13px}
+a{color:var(--acc)}
+.set{display:grid;grid-template-columns:260px minmax(0,1fr);gap:8px 18px;align-items:center}@media(max-width:700px){.set{grid-template-columns:1fr}}
+.set label{font-weight:550}.set .help{grid-column:2;font-size:12.5px;color:var(--mute);margin-top:-4px}@media(max-width:700px){.set .help{grid-column:1}}
+input[type=text],input[type=number],select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+.err{color:var(--rec);font-size:13px;grid-column:2}
+.save{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:12px 20px;display:flex;gap:12px;align-items:center;justify-content:flex-end}
+dialog{border:0;border-radius:12px;padding:0;max-width:min(960px,96vw);background:#000}dialog video{width:100%;display:block}
+dialog .x{position:absolute;top:8px;right:8px}
+.chips span{display:inline-block;margin:2px 6px 2px 0}
+</style>
+</head>
+<body>
+<header><h1>📼 TapeCap</h1><span class="mute small" id="host"></span>
+<nav><button data-tab="status" class="on">Status</button><button data-tab="library">Library</button><button data-tab="settings">Settings</button></nav></header>
+<main>
+<section id="tab-status">
+  <div class="grid">
+    <div class="card">
+      <div id="state" class="state"><span class="dot"></span><span id="stateText">…</span></div>
+      <p id="detail" class="mute"></p>
+      <div id="recBox" hidden>
+        <table><tr><td>Recording time</td><td id="recTime"></td></tr><tr><td>File size</td><td id="recSize"></td></tr>
+        <tr><td>Blank screen</td><td id="recBlank"></td></tr></table>
+        <p><button class="b r" onclick="stopRec()">■ Stop recording now</button></p>
+      </div>
+      <table><tr><td>Capture device</td><td id="dev"></td></tr><tr><td>Audio</td><td id="aud"></td></tr>
+      <tr><td>Saving to</td><td id="lib"></td></tr><tr><td>Free space</td><td id="free"></td></tr></table>
+    </div>
+    <div class="card"><h2>Live picture</h2><img id="preview" alt=""><p class="mute small" id="prevNote">Solid blue = nothing playing.</p></div>
+  </div>
+  <div class="card"><h2>Processing</h2><div id="proc"></div></div>
+  <div class="card"><h2>Activity</h2><div class="ev" id="events"></div></div>
+</section>
+
+<section id="tab-library" hidden>
+  <div class="card"><div class="tapes" id="tapes"></div><p class="mute" id="libEmpty" hidden>No tapes yet – play one and it will appear here.</p></div>
+</section>
+
+<section id="tab-settings" hidden>
+  <div id="settings"></div>
+  <div class="save"><span id="saveMsg" class="small"></span><button class="b" onclick="loadSettings(true)">Undo changes</button><button class="b p" onclick="saveSettings()">Save settings</button></div>
+</section>
+</main>
+<dialog id="player"><button class="b x" onclick="closePlayer()">✕</button><video id="video" controls playsinline></video></dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const api = (p, body) => fetch(p, body === undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}).then(r => r.json());
+const hms = s => { s = Math.round(s); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60; return (h ? h+":"+String(m).padStart(2,"0") : m) + ":" + String(x).padStart(2,"0"); };
+const gb = b => b == null ? "" : (b/1e9 >= 1 ? (b/1e9).toFixed(1)+" GB" : (b/1e6).toFixed(0)+" MB");
+let tab = "status";
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => show(b.dataset.tab));
+function show(t){ if (!["status","library","settings"].includes(t)) t = "status"; tab = t; history.replaceState(null, "", "#" + t); document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  ["status","library","settings"].forEach(x => $("#tab-"+x).hidden = x !== t);
+  if (t === "library") loadLibrary(); if (t === "settings") loadSettings(); }
+
+const STATES = {idle:"Waiting for a tape", recording:"Recording", saving:"Saving…", no_device:"No capture device",
+  waiting_drive:"Waiting for drive", error:"Problem", starting:"Starting…", stopped:"Stopped"};
+async function refresh(){
+  if (tab !== "status") return;
+  let s; try { s = await api("/api/status"); } catch(e){ $("#stateText").textContent = "Service not reachable"; return; }
+  $("#host").textContent = s.host;
+  $("#state").className = "state " + s.state;
+  $("#stateText").textContent = STATES[s.state] || s.state;
+  $("#detail").textContent = s.detail;
+  $("#dev").textContent = s.video ? `${s.video.name} (${s.format.width}x${s.format.height} @ ${s.format.fps} fps)` : "—";
+  $("#aud").textContent = s.audio || "none";
+  $("#lib").textContent = s.library_dir;
+  $("#free").textContent = s.disk ? `${gb(s.disk.free)} of ${gb(s.disk.total)} (≈ ${Math.floor(s.disk.free/50e6/60)} h of tape)` : "";
+  const r = s.recording; $("#recBox").hidden = !r;
+  if (r){ $("#recTime").textContent = hms(r.elapsed); $("#recSize").textContent = gb(r.size);
+          $("#recBlank").textContent = r.blank_seconds ? `${r.blank_seconds.toFixed(0)} s (stops at the limit)` : "no – picture present"; }
+  if (s.preview_age != null && s.preview_age < 10) $("#preview").src = "/api/preview.png?" + Date.now();
+  $("#prevNote").textContent = s.preview_age == null || s.preview_age > 10 ? "No picture from the capture device." : "Solid blue = nothing playing.";
+  const p = s.processor || {};
+  let h = "";
+  if (p.state === "working" && p.tape){
+    h += `<b>${esc(p.tape)}</b> — ${esc(p.step || "")}<div class="bar"><i style="width:${p.pct||0}%"></i></div>
+      <div class="small mute">${(p.pct||0).toFixed(0)}% overall · this step ${(p.step_pct||0).toFixed(0)}% · started ${esc(p.started)}</div>
+      <p class="small">Upscaling: ${esc(p.upscale || "")}</p><button class="b" onclick="cancelJob()">Cancel this tape</button>`;
+  } else h += `<span class="mute">Nothing to process.</span>`;
+  if (p.queue && p.queue.length) h += `<p class="small">Waiting: ${p.queue.map(esc).join(", ")}</p>`;
+  if (p.last) h += `<p class="small mute">Last: ${esc(p.last.tape)} — ${p.last.ok ? "finished" : "failed: "+esc(p.last.error||"")} ${esc(p.last.done)}</p>`;
+  $("#proc").innerHTML = h;
+  $("#events").innerHTML = s.events.map(e => `<div><span class="mute">${esc(e.time.slice(5,16))}</span> ${esc(e.msg)}</div>`).join("");
+}
+async function stopRec(){ if (confirm("Stop recording now? The tape so far will be saved.")) await api("/api/stop", {}); }
+async function cancelJob(){ if (confirm("Cancel processing this tape? You can re-process it later from the Library.")) await api("/api/cancel", {}); }
+
+async function loadLibrary(){
+  const items = await api("/api/library");
+  $("#libEmpty").hidden = items.length > 0;
+  $("#tapes").innerHTML = items.map(t => {
+    const base = "/files/lib/" + encodeURIComponent(t.folder || "") + "/";
+    const mp4 = t.files.includes(t.name + ".mp4") ? base + encodeURIComponent(t.name + ".mp4") : (t.original ? "/files/orig/" + encodeURIComponent(t.original) : null);
+    const srt = t.files.includes(t.name + ".srt") ? base + encodeURIComponent(t.name + ".srt") : "";
+    const img = t.files.includes("contact_sheet.jpg") ? base + "contact_sheet.jpg" : "";
+    return `<div class="tape">
+      ${img ? `<img src="${img}" onclick="play('${mp4}','${srt}')" title="Play">` : `<div class="mute small" style="aspect-ratio:4/3;display:grid;place-items:center;background:var(--bg);border-radius:8px">${t.status === "done" ? "no preview" : t.status}</div>`}
+      <h3>${esc(t.name)}</h3>
+      <span class="tag ${t.status}">${t.status}</span> <span class="small mute">${esc(t.length)} ${t.picture ? "· "+esc(t.picture) : ""} ${t.size ? "· "+gb(t.size) : ""}</span>
+      ${t.error ? `<div class="small" style="color:var(--rec)">${esc(t.error).slice(0,200)}</div>` : ""}
+      <div class="acts">
+        ${mp4 ? `<button class="b" onclick="play('${mp4}','${srt}')">▶ Play</button><a class="b" href="${mp4}?download" download>Download</a>` : ""}
+        ${t.files.includes("transcript.txt") ? `<a class="b" href="${base}transcript.txt" target="_blank">Transcript</a>` : ""}
+        ${t.files.includes(t.name + "_SD.mp4") ? `<a class="b" href="${base}${encodeURIComponent(t.name+"_SD.mp4")}?download" download>Standard version</a>` : ""}
+        ${t.original && t.status !== "processing" ? `<button class="b" onclick="reprocess('${esc(t.original)}')">${t.status === "failed" ? "Retry" : "Re-process"}</button>` : ""}
+      </div></div>`;
+  }).join("");
+}
+function play(src, srt){
+  const v = $("#video"); v.innerHTML = ""; v.src = src;
+  if (srt){ const t = document.createElement("track"); t.kind = "subtitles"; t.label = "Speech"; t.srclang = "en";
+    t.src = srt.replace(/\.srt$/, ".vtt"); v.appendChild(t); }
+  $("#player").showModal(); v.play();
+}
+function closePlayer(){ const v = $("#video"); v.pause(); v.removeAttribute("src"); v.load(); $("#player").close(); }
+async function reprocess(name){
+  if (!confirm(`Process ${name} again with the current settings? The library copy will be replaced when it finishes.`)) return;
+  await api("/api/reprocess", {name}); loadLibrary();
+}
+
+// ---------------------------------------------------------------- settings
+const SECTIONS = [
+ ["Capture device", [
+  ["video_device","Video device","videosel","“Automatic” uses the first USB capture device it finds."],
+  ["audio_device","Audio input","audiosel","Automatic picks the audio input on the same USB capture stick."],
+  ["video_format","Picture format","formatsel","Automatic prefers 720x480 (NTSC) / 720x576 (PAL) MJPEG."],
+ ]],
+ ["Save locations", [
+  ["library_dir","Library folder (finished tapes)","dir","The enhanced videos, transcripts and contact sheets go here."],
+  ["originals_dir","Originals folder","dir","Trimmed raw recordings, kept untouched as a backup."],
+  ["work_dir","Working folder","dir","Recordings in progress and temporary files. Put it on the same big drive."],
+  ["name_prefix","File name prefix","text","Files are named PREFIX_date_time."],
+ ]],
+ ["Start & stop", [
+  ["start_seconds","Start after picture for (s)","number","",0.2],
+  ["stop_blank_seconds","Stop after blank screen for (s)","number","How long the screen must stay blue/black before the tape counts as finished."],
+  ["min_keep_seconds","Discard recordings shorter than (s)","number",""],
+  ["max_record_minutes","Maximum recording length (min)","number","Safety stop for tapes that end in snow instead of blue. 0 = no limit."],
+  ["record_quality","Recording quality (CRF)","number","Lower = better quality and bigger files. 18–23 is sensible."],
+  ["blank_tolerance","Blank detection tolerance","number","Advanced."],
+  ["blank_fraction","Blank detection fraction","number","Advanced (0.5–0.999).",0.01],
+ ]],
+ ["Sound", [
+  ["normalize_audio","Even out the volume","bool","Brings every tape to the same comfortable loudness."],
+  ["loudness_target","Loudness target (LUFS)","number","-14 is streaming level. Higher (e.g. -12) = louder."],
+  ["rumble_filter","Remove rumble / wind","bool","Cuts very low sounds (below 80 Hz)."],
+  ["hiss_reduction","Tape hiss reduction","select",""],
+ ]],
+ ["Picture", [
+  ["crop_edges","Crop black edges","bool",""],
+  ["aspect","Shape","select","Almost all tapes are 4:3."],
+  ["output_height","Output height (pixels)","number","480 keeps the tape's real detail. Upscaling (below) is the way to go bigger."],
+  ["stabilize","Stabilize shaky video","select","Stronger = steadier, but zooms in slightly more."],
+  ["sharpen","Light sharpening","bool",""],
+ ]],
+ ["Upscaling (needs a graphics card)", [
+  ["upscale","AI upscaling","select","Auto = only on a computer with a dedicated graphics card. On = also use built-in graphics (very slow)."],
+  ["upscale_factor","Upscale by","select","2× turns 640x480 into 1280x960."],
+  ["upscale_model","AI model","select","realesr-animevideov3 is fast; x4plus is slower and sharper."],
+  ["upscale_gpu","Graphics card(s)","text","“auto” or card numbers from the list above, e.g. 0,1 to use two cards."],
+  ["upscale_binary","Real-ESRGAN program","text","Leave blank to find it automatically."],
+  ["keep_standard_version","Also keep the standard version","bool",""],
+ ]],
+ ["Transcripts & chapters", [
+  ["transcribe","Transcribe speech (subtitles)","bool",""],
+  ["whisper_model","Speech model","select","small.en = accurate; base.en ≈ 3× faster."],
+  ["language","Language","text","e.g. en. Blank = detect automatically (non-.en models only)."],
+  ["chapters","Add chapters","bool","At camera stop/start points."],
+  ["chapter_sensitivity","Chapter sensitivity","number","Lower = more chapters."],
+  ["contact_sheet","Make contact sheet","bool",""],
+ ]],
+ ["Notifications", [
+  ["notify","Phone messages","select","“hermes” sends Telegram messages through Hermes Agent."],
+  ["notify_target","Send to","text","e.g. telegram:123456789"],
+ ]],
+ ["System", [
+  ["process_threads","Processor threads","number","CPU threads used for transcription."],
+  ["web_port","Control panel port","number","Needs a service restart."],
+ ]],
+];
+let CFG = null, DEV = null;
+async function loadSettings(force){
+  if (CFG && !force) return;
+  const [c, d] = await Promise.all([api("/api/config"), api("/api/devices")]);
+  CFG = c; DEV = d; renderSettings();
+}
+function opt(v, label, cur){ return `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(label)}</option>`; }
+function field([k, label, type, help, step]){
+  const v = CFG.config[k]; let input = "";
+  if (type === "bool") input = `<input type="checkbox" id="f_${k}" ${v ? "checked" : ""}>`;
+  else if (type === "select") input = `<select id="f_${k}">${CFG.choices[k].map(o => opt(o, o, v)).join("")}</select>`;
+  else if (type === "number") input = `<input type="number" id="f_${k}" value="${esc(v)}" step="${step || 1}">`;
+  else if (type === "videosel") input = `<select id="f_${k}">${opt("auto","Automatic",v)}${DEV.video.map(d => opt(d.path, `${d.name} (${d.dev})`, v)).join("")}${v !== "auto" && !DEV.video.some(d => d.path === v) ? opt(v, v + " (not connected)", v) : ""}</select>`;
+  else if (type === "audiosel") input = `<select id="f_${k}">${opt("auto","Automatic",v)}${opt("none","No audio",v)}${DEV.audio.map(a => opt(a.path, `${a.name} (${a.path})`, v)).join("")}</select>`;
+  else if (type === "formatsel"){ const ids = [...new Set(DEV.video.flatMap(d => d.format_ids))];
+    input = `<select id="f_${k}">${opt("auto","Automatic",v)}${ids.map(i => opt(i, i, v)).join("")}</select>`; }
+  else input = `<input type="text" id="f_${k}" value="${esc(v)}" ${type === "dir" ? 'list="drives"' : ""}>`;
+  return `<label for="f_${k}">${esc(label)}</label><div>${input}</div>${help ? `<div class="help">${esc(help)}</div>` : ""}<div class="err" id="e_${k}"></div>`;
+}
+function renderSettings(){
+  const gp = DEV.gpus.length ? DEV.gpus.map(g => `<span>#${g.index} ${esc(g.name)} — ${g.use === "good" ? "✅ supported" : g.use === "slow" ? "⚠️ built-in, very slow" : "❌ not a GPU"}</span>`).join("<br>") : "none found";
+  const plan = DEV.upscale_plan.gpus ? `✅ Will upscale on GPU ${DEV.upscale_plan.gpus.join(",")}` : `Not upscaling: ${esc(DEV.upscale_plan.reason)}`;
+  const info = `<div class="card"><h2>This computer</h2><table>
+    <tr><td>Capture devices</td><td>${DEV.video.map(d => esc(d.name)+" <span class=mute>"+esc(d.dev)+"</span>").join("<br>") || "none found"}</td></tr>
+    <tr><td>Graphics cards</td><td class="chips">${gp}</td></tr>
+    <tr><td>Upscaler</td><td>${DEV.upscaler ? esc(DEV.upscaler) : "not installed"}<br><b>${plan}</b></td></tr>
+    <tr><td>Speech-to-text</td><td>${DEV.whisper ? "installed" : "not installed"}</td></tr>
+    <tr><td>Drives</td><td>${DEV.drives.map(d => esc(d.path)+" <span class=mute>"+gb(d.free)+" free</span>").join("<br>")}</td></tr></table>
+    <p><button class="b" onclick="rescan()">↻ Re-scan devices</button></p></div>
+    <datalist id="drives">${DEV.drives.map(d => `<option value="${esc(d.path)}">`).join("")}</datalist>`;
+  $("#settings").innerHTML = info + SECTIONS.map(([t, fields]) => `<div class="card"><h2>${esc(t)}</h2><div class="set">${fields.map(field).join("")}</div></div>`).join("");
+}
+async function rescan(){ DEV = await api("/api/rescan", {}); renderSettings(); }
+async function saveSettings(){
+  const out = {};
+  SECTIONS.forEach(([, fs]) => fs.forEach(([k, , type]) => { const el = $("#f_"+k); out[k] = type === "bool" ? el.checked : el.value; }));
+  document.querySelectorAll(".err").forEach(e => e.textContent = "");
+  const r = await api("/api/config", out);
+  if (!r.ok){ Object.entries(r.errors || {}).forEach(([k, m]) => { const e = $("#e_"+k); if (e) e.textContent = m; });
+    $("#saveMsg").innerHTML = `<span style="color:var(--rec)">Not saved – please fix the highlighted settings.</span>`; return; }
+  $("#saveMsg").innerHTML = `<span style="color:var(--ok)">Saved – applied ${esc(r.applied)}. ${esc(r.note || "")}</span>`;
+  CFG = null; loadSettings();
+}
+show(location.hash.slice(1)); refresh(); setInterval(refresh, 1500);
+</script>
+</body>
+</html>
